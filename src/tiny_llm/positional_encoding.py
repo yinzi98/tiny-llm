@@ -19,7 +19,6 @@ class RoPE:
         self.cos_freqs = mx.cos(freqs)
         self.base = base
         self.traditional = traditional
-        
 
     def __call__(
         self, x: mx.array, offset: list[slice] | slice | None = None

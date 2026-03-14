@@ -24,15 +24,42 @@ class Qwen2MultiHeadAttention:
         max_seq_len: int = 32768,
         theta: int = 1000000,
     ):
-        pass
+        self.hidden_size = hidden_size
+        self.num_heads = num_heads
+        self.head_dim = hidden_size // num_heads
+        self.num_kv_heads = num_kv_heads
+        self.wq = wq
+        self.wk = wk
+        self.wv = wv
+        self.wo = wo
+        self.bq = bq
+        self.bk = bk
+        self.bv = bv
+        self.rope = RoPE(self.head_dim, max_seq_len, theta)
 
     def __call__(
         self,
         x: mx.array,
         mask: mx.array | str | None = None,
     ) -> mx.array:
-        pass
-
+        B, L, _ = x.shape
+        projection_query = self.rope(
+            linear(x, self.wq, self.bq)
+            .reshape(B, L, self.num_heads, self.head_dim)
+        )
+        projection_key = self.rope(
+            linear(x, self.wk, self.bk)
+            .reshape(B, L, self.num_kv_heads, self.head_dim)
+        )
+        projection_value = (
+            linear(x, self.wv, self.bv)
+            .reshape(B, L, self.num_kv_heads, self.head_dim)
+        )
+        projection_query = projection_query.transpose(0, 2, 1, 3)
+        projection_key = projection_key.transpose(0, 2, 1, 3)
+        projection_value = projection_value.transpose(0, 2, 1, 3)
+        o = scaled_dot_product_attention_grouped(projection_query, projection_key, projection_value, None, mask)
+        return linear(o.transpose(0, 2, 1, 3).reshape(B, L, self.hidden_size), self.wo)
 
 class Qwen2MLP:
     def __init__(
