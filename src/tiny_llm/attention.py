@@ -80,7 +80,23 @@ def scaled_dot_product_attention_grouped(
     scale: float | None = None,
     mask: mx.array | str | None = None,
 ) -> mx.array:
-    pass
+    H, S, _ = key.shape[-3:]
+    HQ, L, D = query.shape[-3:]
+    assert HQ % H == 0
+    H_repeats = HQ // H
+    B = query.shape[:-3]
+
+    query = query.reshape(*B, H, H_repeats, L, D)
+    key = key.reshape(*B, H, 1, S, D)
+    value = value.reshape(*B, H, 1, S, D)
+
+    if scale is None:
+        scale = mx.rsqrt(key.shape[-1])
+    scores = mx.matmul(query, key.swapaxes(-2, -1)) * scale
+    if mask is not None:
+        mask = mask.reshape(*B, H, H_repeats, L, S)
+        scores = scores + mask
+    return mx.matmul(softmax(scores, axis=-1), value).reshape(*B, HQ, L, D)
 
 
 def flash_attention(
