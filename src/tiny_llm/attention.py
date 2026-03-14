@@ -70,7 +70,7 @@ class SimpleMultiHeadAttention:
 
 
 def causal_mask(L: int, S: int, dtype: mx.Dtype) -> mx.array:
-    pass
+    return mx.triu(mx.full((L, S), -mx.inf), k = (S - L) + 1)
 
 
 def scaled_dot_product_attention_grouped(
@@ -94,8 +94,12 @@ def scaled_dot_product_attention_grouped(
         scale = mx.rsqrt(key.shape[-1])
     scores = mx.matmul(query, key.swapaxes(-2, -1)) * scale
     if mask is not None:
-        mask = mask.reshape(*B, H, H_repeats, L, S)
-        scores = scores + mask
+        if isinstance(mask, str):
+            if mask == "causal":
+                scores = scores + causal_mask(L, S, scores.dtype)
+        elif isinstance(mask, mx.array):
+            mask = mask.reshape(*B, H, H_repeats, L, S)
+            scores = scores + mask
     return mx.matmul(softmax(scores, axis=-1), value).reshape(*B, HQ, L, D)
 
 
