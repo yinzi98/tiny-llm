@@ -146,10 +146,44 @@ class Qwen2TransformerBlock:
 
 class Qwen2ModelWeek1:
     def __init__(self, mlx_model: Any):
-        pass
-
+        args = mlx_model.args
+        self.layers = [
+            Qwen2TransformerBlock(
+                num_attention_heads=args.num_attention_heads,
+                num_kv_heads=args.num_key_value_heads,
+                hidden_size=args.hidden_size,
+                intermediate_size=args.intermediate_size,
+                rms_norm_eps=args.rms_norm_eps,
+                theta=args.rope_theta,
+                wq=dequantize_linear(layer.self_attn.q_proj),
+                wk=dequantize_linear(layer.self_attn.k_proj),
+                wv=dequantize_linear(layer.self_attn.v_proj),
+                wo=dequantize_linear(layer.self_attn.o_proj),
+                bq=layer.self_attn.q_proj.bias,
+                bk=layer.self_attn.k_proj.bias,
+                bv=layer.self_attn.v_proj.bias,
+                w_gate=dequantize_linear(layer.mlp.gate_proj),
+                w_up=dequantize_linear(layer.mlp.up_proj),
+                w_down=dequantize_linear(layer.mlp.down_proj),
+                w_input_layernorm=layer.input_layernorm.weight,
+                w_post_attention_layernorm=layer.post_attention_layernorm.weight
+            ) for layer in mlx_model.model.layers
+        ]
+        self.embedding = Embedding(args.vocab_size, args.hidden_size, dequantize_linear(mlx_model.model.embed_tokens))
+        self.norm = RMSNorm(args.hidden_size, mlx_model.model.norm.weight, args.rms_norm_eps)
+        self.tie_word_embeddings = args.tie_word_embeddings
+        if not self.tie_word_embeddings:
+            self.w_lm_head = dequantize_linear(mlx_model.lm_head)
     def __call__(
         self,
         inputs: mx.array,
     ) -> mx.array:
-        pass
+        x = self.embedding(inputs)
+        for layer in self.layers:
+            x = layer(x, mask="causal")
+        x = self.norm(x)
+        if not self.tie_word_embeddings:
+            x = linear(x, self.w_lm_head)
+        else:
+            x = self.embedding.as_linear(x)
+        return x
