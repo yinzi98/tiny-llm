@@ -13,10 +13,13 @@ def simple_generate(
 ) -> str:
     def _step(model, y):
         logits = model(y.reshape(1, -1))[..., -1, :]
+        logprobs = logits - mx.logsumexp(
+            logits, keepdims=True
+        )
         if sampler is None:
-            return mx.argmax(logits, axis=-1)
+            return mx.argmax(logprobs, axis=-1)
         else:
-            return sampler(logits)
+            return sampler(logprobs)
 
     tokens = mx.array(tokenizer.encode(prompt))
     detokenizer = tokenizer.detokenizer
