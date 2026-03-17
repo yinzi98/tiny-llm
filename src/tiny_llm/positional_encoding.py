@@ -27,7 +27,7 @@ class RoPE:
 
         if offset is not None:
             if isinstance(offset, list):
-                assert len(offset) == L
+                assert len(offset) == N
                 for o in offset:
                     assert o.stop - o.start == L
                 offset = mx.array(
